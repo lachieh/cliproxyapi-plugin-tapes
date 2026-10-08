@@ -1,0 +1,8 @@
+plugins/
+dist/
+*.so
+*.dylib
+*.dll
+*.h
+*.zip
+*.sha256

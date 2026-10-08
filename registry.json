@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "tapes",
+      "name": "tapes",
+      "description": "Records every request and response passing through CLIProxyAPI as sessions in tapes (self-hosted agent telemetry).",
+      "author": "Lachlan Heywood",
+      "repository": "https://github.com/lachieh/cliproxyapi-plugin-tapes",
+      "logo": "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugin-tapes/main/assets/icon.svg",
+      "homepage": "https://tapes.dev",
+      "license": "MIT",
+      "tags": ["telemetry", "observability", "logging"]
+    }
+  ]
+}
