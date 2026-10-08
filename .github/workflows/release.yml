@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { runner: macos-latest, goarch: arm64, cc: clang }
+          - { runner: macos-latest, goarch: amd64, cc: "clang -arch x86_64" }
+          - { runner: ubuntu-latest, goarch: amd64, cc: gcc }
+          - { runner: ubuntu-24.04-arm, goarch: arm64, cc: gcc }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test
+      - run: make package VERSION=${{ github.ref_name }}
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          CC: ${{ matrix.cc }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip-${{ matrix.runner }}-${{ matrix.goarch }}
+          path: dist/*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum *.zip > checksums.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" --generate-notes
