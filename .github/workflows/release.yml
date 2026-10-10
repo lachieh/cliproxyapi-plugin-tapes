@@ -3,6 +3,8 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Manual runs build and test every target without publishing.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,12 +16,12 @@ jobs:
         include:
           - { runner: macos-latest, goarch: arm64, cc: clang }
           - { runner: macos-latest, goarch: amd64, cc: "clang -arch x86_64" }
-          - { runner: ubuntu-latest, goarch: amd64, cc: gcc }
+          - { runner: ubuntu-24.04, goarch: amd64, cc: gcc }
           - { runner: ubuntu-24.04-arm, goarch: arm64, cc: gcc }
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: make test
@@ -27,16 +29,17 @@ jobs:
         env:
           GOARCH: ${{ matrix.goarch }}
           CC: ${{ matrix.cc }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: zip-${{ matrix.runner }}-${{ matrix.goarch }}
           path: dist/*.zip
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
