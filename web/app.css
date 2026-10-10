@@ -58,12 +58,13 @@ main { margin-top: 14px; }
 .intro { margin: 0 0 10px; }
 
 /* tree */
-.node { border: 1px solid var(--line); border-left: 3px solid var(--end); border-radius: 8px; background: var(--card);
+.node { border: 1px solid var(--line); border-radius: 8px; background: var(--card);
   padding: 8px 10px; margin: 6px 0; transition: opacity .15s; }
-.k-if { border-left-color: var(--if); }
-.k-pick { border-left-color: var(--pick); }
-.k-reject { border-left-color: var(--reject); }
-.k-route { border-left-color: var(--accent); }
+/* Node kind is carried by the kind selector's colour, not the card border. */
+.node-head .kind { color: var(--end); }
+.k-if > .node-head .kind { color: var(--if); }
+.k-pick > .node-head .kind { color: var(--pick); }
+.k-reject > .node-head .kind { color: var(--reject); }
 .node-head { display: flex; align-items: center; gap: 6px; }
 .node-head .kind { font-weight: 600; }
 .node-head .name { flex: 1; border-color: transparent; background: none; font-weight: 600; }
