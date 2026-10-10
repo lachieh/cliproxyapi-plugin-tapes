@@ -17,9 +17,11 @@ import (
 
 // Config is the YAML under plugins.configs.<plugin-id>.
 type Config struct {
-	// Enabled and Priority are interpreted by the host; declared so strict decoding accepts them.
-	Enabled  *bool `yaml:"enabled"`
-	Priority int   `yaml:"priority"`
+	// Enabled, Priority, and Store are interpreted by the host; declared so strict decoding
+	// accepts them. Store is the manifest the host records when installing from a plugin store.
+	Enabled  *bool     `yaml:"enabled"`
+	Priority int       `yaml:"priority"`
+	Store    yaml.Node `yaml:"store"`
 
 	// Timezone for hours/days matching. Defaults to the host's local zone.
 	Timezone string `yaml:"timezone"`

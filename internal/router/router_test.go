@@ -305,7 +305,9 @@ routes:
 }
 
 func TestNoTreeLeavesPicksToHost(t *testing.T) {
-	for _, yaml := range []string{"", "enabled: true\npriority: 5\n"} {
+	// A store install adds a store manifest block next to enabled.
+	storeInstalled := "enabled: true\nstore:\n  id: lachieh-router\n  version: 0.2.0\n  release-tag: v0.2.0\n  repository: lachieh/cliproxyapi-plugin-lachieh\n"
+	for _, yaml := range []string{"", "enabled: true\npriority: 5\n", storeInstalled} {
 		r := mustParse(t, yaml, nil)
 		if got := r.Pick(pickReq("m", "", "a"), weekdayMorning); got.Handled {
 			t.Errorf("%q: got %+v", yaml, got)
