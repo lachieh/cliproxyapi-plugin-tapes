@@ -299,3 +299,19 @@ func TestSenderDropsWhenFull(t *testing.T) {
 		t.Errorf("sent=%d dropped=%d", sent, dropped)
 	}
 }
+
+func TestProjectDir(t *testing.T) {
+	cases := map[string]string{
+		// The conversation quotes the phrase before the real environment block.
+		`{"messages":[{"role":"user","content":"it matched ` + "`Primary working directory: ...`" + `"},{"role":"user","content":"<env>\nPrimary working directory: /Users/me/proj\n</env>"}]}`: "/Users/me/proj",
+		// The system prompt wins over a path quoted in the conversation.
+		`{"messages":[{"role":"user","content":"Primary working directory: /tmp/quoted"}],"system":"Primary working directory: /srv/real\n"}`: "/srv/real",
+		`{"instructions":"Working directory: ~/code/app\n"}`:                               "~/code/app",
+		`{"messages":[{"role":"user","content":"Primary working directory: not a path"}]}`: "",
+	}
+	for body, want := range cases {
+		if got := projectDir([]byte(body)); got != want {
+			t.Errorf("projectDir(%s) = %q, want %q", body, got, want)
+		}
+	}
+}

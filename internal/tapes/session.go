@@ -50,17 +50,20 @@ var harnesses = []struct {
 	{"gemini-cli", "gemini"},
 }
 
+// jsonPath captures an absolute path inside a JSON string.
+const jsonPath = `((?:/|~/|[A-Za-z]:\\\\)(?:[^"\\<]|\\\\)*)`
+
 var (
 	userAgentVersion   = regexp.MustCompile(`^[^/\s]+[/\s]v?(\d[\w.+-]*)`)
 	claudeLegacyUserID = regexp.MustCompile(`_session_([0-9a-fA-F-]{36})`)
 	// Coding agents state the working directory in their prompts: Claude Code
 	// and OpenCode in the system prompt, Codex in an <environment_context>
-	// message. These match the JSON-encoded request, so a path ends at an
-	// escaped newline, a quote or a tag.
+	// message. These match JSON-encoded text, so a path starts with /, ~/ or a
+	// drive letter and ends at an escaped newline, a quote or a tag.
 	cwdPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`Primary working directory: ((?:[^"\\<]|\\\\)+)`),
-		regexp.MustCompile(`<cwd>((?:[^"\\<]|\\\\)+)</cwd>`),
-		regexp.MustCompile(`Working directory: ((?:[^"\\<]|\\\\)+)`),
+		regexp.MustCompile(`Primary working directory: ` + jsonPath),
+		regexp.MustCompile(`<cwd>` + jsonPath + `</cwd>`),
+		regexp.MustCompile(`Working directory: ` + jsonPath),
 	}
 )
 
@@ -153,10 +156,20 @@ func claudeSessionFromUserID(userID string) string {
 	return ""
 }
 
+// projectDir reads the working directory from the system prompt, or failing
+// that from anywhere in the request. The system prompt goes first because the
+// conversation can quote these phrases.
 func projectDir(request []byte) string {
-	for _, re := range cwdPatterns {
-		if m := re.FindSubmatch(request); m != nil {
-			return strings.TrimSpace(strings.ReplaceAll(string(m[1]), `\\`, `\`))
+	var body struct {
+		System       json.RawMessage `json:"system"`
+		Instructions json.RawMessage `json:"instructions"`
+	}
+	_ = json.Unmarshal(request, &body)
+	for _, text := range [][]byte{body.System, body.Instructions, request} {
+		for _, re := range cwdPatterns {
+			if m := re.FindSubmatch(text); m != nil {
+				return strings.TrimSpace(strings.ReplaceAll(string(m[1]), `\\`, `\`))
+			}
 		}
 	}
 	return ""
