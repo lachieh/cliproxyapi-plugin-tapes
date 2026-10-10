@@ -12,10 +12,11 @@ import (
 // State is process-lifetime memory shared across config reloads: session pins, the accounts
 // the host has offered (their IDs are what prefer globs match), and recent decisions.
 type State struct {
-	mu     sync.Mutex
-	pins   map[string]pin
-	seen   map[string]SeenAccount
-	recent []Decision
+	mu      sync.Mutex
+	pins    map[string]pin
+	seen    map[string]SeenAccount
+	clients map[string]SeenClient
+	recent  []Decision
 }
 
 type pin struct {
@@ -31,14 +32,24 @@ type SeenAccount struct {
 	LastSeen time.Time `json:"last_seen"`
 }
 
+// SeenClient is a client API key that has made requests, identified by its hash.
+type SeenClient struct {
+	SHA256   string    `json:"sha256"`
+	Hint     string    `json:"hint"`
+	Name     string    `json:"name,omitempty"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
 // Decision is one handled route or pick.
 type Decision struct {
 	At      time.Time `json:"at"`
 	Hook    string    `json:"hook"`
 	Rule    string    `json:"rule"`
+	Client  string    `json:"client,omitempty"`
 	Session string    `json:"session,omitempty"`
 	Model   string    `json:"model"`
 	Result  string    `json:"result"`
+	Path    []Step    `json:"path,omitempty"`
 }
 
 // Pin is a session currently bound to an account.
@@ -52,6 +63,7 @@ type Pin struct {
 // Snapshot is the debugging view served by the management route.
 type Snapshot struct {
 	Accounts []SeenAccount `json:"accounts"`
+	Clients  []SeenClient  `json:"clients"`
 	Pins     []Pin         `json:"pins"`
 	Recent   []Decision    `json:"recent"`
 }
@@ -63,7 +75,7 @@ const (
 
 // NewState returns empty state.
 func NewState() *State {
-	return &State{pins: make(map[string]pin), seen: make(map[string]SeenAccount)}
+	return &State{pins: make(map[string]pin), seen: make(map[string]SeenAccount), clients: make(map[string]SeenClient)}
 }
 
 func (s *State) pinned(key string, now time.Time) (string, bool) {
@@ -101,6 +113,12 @@ func (s *State) observe(candidates []pluginapi.SchedulerAuthCandidate, now time.
 	}
 }
 
+func (s *State) observeClient(digest, hint, name string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[digest] = SeenClient{SHA256: digest, Hint: hint, Name: name, LastSeen: now}
+}
+
 func (s *State) record(d Decision) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,7 +133,11 @@ func (s *State) Snapshot(now time.Time) Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneLocked(now)
-	out := Snapshot{Accounts: []SeenAccount{}, Pins: []Pin{}, Recent: []Decision{}}
+	out := Snapshot{Accounts: []SeenAccount{}, Clients: []SeenClient{}, Pins: []Pin{}, Recent: []Decision{}}
+	for _, c := range s.clients {
+		out.Clients = append(out.Clients, c)
+	}
+	slices.SortFunc(out.Clients, func(a, b SeenClient) int { return b.LastSeen.Compare(a.LastSeen) })
 	for _, a := range s.seen {
 		out.Accounts = append(out.Accounts, a)
 	}
