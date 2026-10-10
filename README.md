@@ -48,12 +48,15 @@ plugins:
     tapes:
       enabled: true
       ingest-url: "http://tapes.homelab.lan:8082"
+      keys:
+        laptop: "sk-cpa-laptop-..."   # a key from access.api-keys
+        homelab-ci: "sk-cpa-ci-..."
 ```
 
 | Key | Default | Description |
 | --- | --- | --- |
 | `ingest-url` | `http://localhost:8082` | Your tapes ingest API. A base URL gets `/v1/ingest` appended. |
-| `agent-name` | `cliproxyapi` | Agent name recorded on each turn. A client can override it per request with an `X-Tapes-Agent-Name` header. |
+| `keys` | none | Names for your client API keys (`name: key`). The name is recorded as the session's auth subject and in the agent name. The keys themselves are never sent to tapes. |
 | `headers` | none | Extra headers for each ingest request, such as `Authorization` for a gateway in front of tapes. |
 | `timeout-seconds` | `10` | Timeout for each ingest request. |
 | `queue-size` | `256` | Turns buffered while tapes is slow. Turns beyond this are dropped and a warning is logged. |
@@ -90,15 +93,34 @@ These requests are **not** recorded:
 
 A stream the client abandons partway is recorded with whatever it produced.
 
-### Sessions
+### Who and where
 
-tapes groups turns into sessions by harness and session ID. The plugin reads these from what coding agents already send:
+The plugin fills tapes' own session fields from what coding agents already send:
 
-1. `X-Tapes-Harness-Id` / `X-Tapes-Harness-Session-Id` / `X-Tapes-Parent-Harness-Session-Id` headers, when a client sets them.
-2. Claude Code's session ID, from the `X-Claude-Code-Session-Id` header or `metadata.user_id`. Subagent turns are tagged with their agent ID.
-3. Codex's `session_id` header or `prompt_cache_key`.
-4. A generic `X-Session-Id` header.
-5. Otherwise, a hash of the conversation's system prompt and first message. This hash stays the same as later turns resend the history.
+| tapes field | Value |
+| --- | --- |
+| `harness_id` | The coding tool, detected from `User-Agent`: `claude`, `codex`, `opencode` or `gemini`. Unrecognized clients get `cliproxyapi`. tapes' own `unknown` can't be used, because tapes never derives sessions for `unknown` turns sent through its ingest API. |
+| `harness_version` | The tool's version, from `User-Agent`. |
+| `auth_subject` | The name of the client API key, from `keys`. |
+| `cwd` | The project directory, read from the prompt (Claude Code, OpenCode and Codex state it). |
+| `agent_name` | `<key name>/<tool>`, e.g. `laptop/claude`. If only one is known, just that one; if neither, `unknown`. |
+| `harness_session_id` | Taken from the first of these that is available. |
+
+The session ID sources, in order:
+
+1. Claude Code's session ID, from the `X-Claude-Code-Session-Id` header or `metadata.user_id`. Subagent turns are also tagged with their agent ID.
+2. Codex's `session_id` header or `prompt_cache_key`.
+3. A generic `X-Session-Id` header.
+4. Otherwise, a hash of the conversation's system prompt and first message. The hash stays the same as later turns resend the history, so they land in the same session.
+
+A client can set any of these explicitly with the headers tapes' own proxy reads. They take precedence over detection:
+
+- `X-Tapes-Agent-Name`
+- `X-Tapes-Harness-Id`
+- `X-Tapes-Harness-Version`
+- `X-Tapes-Harness-Session-Id`
+- `X-Tapes-Parent-Harness-Session-Id`
+- `X-Tapes-Cwd`
 
 ## Develop
 

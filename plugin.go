@@ -39,8 +39,8 @@ type plugin struct {
 	recorder *capture.Recorder
 	now      func() time.Time
 
-	agentName atomic.Value // string
-	sender    atomic.Pointer[tapes.Sender]
+	sender   atomic.Pointer[tapes.Sender]
+	keyNames atomic.Pointer[map[string]string]
 
 	configMu sync.Mutex
 	config   *config.Config
@@ -49,9 +49,7 @@ type plugin struct {
 }
 
 func newPlugin(log tapes.Logger) *plugin {
-	p := &plugin{log: log, recorder: capture.NewRecorder(), now: time.Now}
-	p.agentName.Store("cliproxyapi")
-	return p
+	return &plugin{log: log, recorder: capture.NewRecorder(), now: time.Now}
 }
 
 func (p *plugin) handle(method string, request []byte) (any, error) {
@@ -122,7 +120,7 @@ func (p *plugin) configure(raw []byte) {
 		return
 	}
 	p.config = &cfg
-	p.agentName.Store(cfg.AgentName)
+	p.keyNames.Store(&cfg.KeyNames)
 	if old := p.sender.Swap(tapes.NewSender(cfg, p.log)); old != nil {
 		go closeSender(old)
 	}
@@ -135,7 +133,11 @@ func (p *plugin) record(x capture.Exchange) {
 	if sender == nil {
 		return
 	}
-	turn, err := tapes.BuildTurn(x, p.agentName.Load().(string))
+	var keyNames map[string]string
+	if m := p.keyNames.Load(); m != nil {
+		keyNames = *m
+	}
+	turn, err := tapes.BuildTurn(x, keyNames)
 	if err != nil {
 		p.log("debug", "tapes: skipping request", map[string]any{"request_id": x.RequestID, "reason": err.Error()})
 		return
@@ -188,7 +190,7 @@ func registration(hostSchemaVersion int) map[string]any {
 			"Logo":             logo,
 			"ConfigFields": []configField{
 				{"ingest-url", "string", "tapes ingest API URL, e.g. http://tapes.lan:8082. /v1/ingest is appended when missing. Default: " + config.DefaultIngestURL},
-				{"agent-name", "string", "Agent name recorded on each turn, unless the client sends X-Tapes-Agent-Name. Default: cliproxyapi"},
+				{"keys", "object", "Names for client API keys (name: key), recorded as the session's auth subject and in the agent name, e.g. laptop/claude."},
 				{"headers", "object", "Extra HTTP headers sent to tapes, e.g. an Authorization header for a gateway in front of it."},
 				{"timeout-seconds", "integer", "Timeout for each ingest request. Default: 10"},
 				{"queue-size", "integer", "Turns buffered while tapes is slow; beyond this they are dropped. Default: 256"},

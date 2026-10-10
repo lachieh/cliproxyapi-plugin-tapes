@@ -3,6 +3,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"strings"
@@ -19,15 +21,16 @@ const ingestPath = "/v1/ingest"
 type Config struct {
 	// IngestEndpoint is the full URL turns are POSTed to.
 	IngestEndpoint string
-	AgentName      string
-	Headers        map[string]string
-	Timeout        time.Duration
-	QueueSize      int
+	// KeyNames maps a client API key's caller scope to the name it is recorded under.
+	KeyNames  map[string]string
+	Headers   map[string]string
+	Timeout   time.Duration
+	QueueSize int
 }
 
 type rawConfig struct {
 	IngestURL      string            `yaml:"ingest-url"`
-	AgentName      string            `yaml:"agent-name"`
+	Keys           map[string]string `yaml:"keys"`
 	Headers        map[string]string `yaml:"headers"`
 	TimeoutSeconds *int              `yaml:"timeout-seconds"`
 	QueueSize      *int              `yaml:"queue-size"`
@@ -48,13 +51,19 @@ func Parse(data []byte) (Config, error) {
 
 	cfg := Config{
 		IngestEndpoint: endpoint,
-		AgentName:      strings.TrimSpace(raw.AgentName),
 		Headers:        raw.Headers,
 		Timeout:        10 * time.Second,
 		QueueSize:      256,
 	}
-	if cfg.AgentName == "" {
-		cfg.AgentName = "cliproxyapi"
+	for name, key := range raw.Keys {
+		name, key = strings.TrimSpace(name), strings.TrimSpace(key)
+		if name == "" || key == "" {
+			return Config{}, fmt.Errorf("keys: entries need a name and a key")
+		}
+		if cfg.KeyNames == nil {
+			cfg.KeyNames = make(map[string]string, len(raw.Keys))
+		}
+		cfg.KeyNames[CallerScope(key)] = name
 	}
 	if raw.TimeoutSeconds != nil {
 		if *raw.TimeoutSeconds <= 0 {
@@ -90,4 +99,12 @@ func ingestEndpoint(raw string) (string, error) {
 		u.Path += ingestPath
 	}
 	return u.String(), nil
+}
+
+// CallerScope reproduces CLIProxyAPI's caller scope for a client API key
+// (sdk/cliproxy/session.CallerScope), so keys can be named without the
+// plugin ever handling the key a request used.
+func CallerScope(apiKey string) string {
+	sum := sha256.Sum256([]byte("cli-proxy-api:caller-scope:v1\x00" + strings.TrimSpace(apiKey)))
+	return hex.EncodeToString(sum[:])
 }

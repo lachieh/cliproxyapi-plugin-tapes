@@ -41,8 +41,11 @@ type turnMeta struct {
 }
 
 type sessionEnvelope struct {
+	AuthSubject            string  `json:"auth_subject"`
 	HarnessID              string  `json:"harness_id"`
 	HarnessSessionID       string  `json:"harness_session_id,omitempty"`
+	HarnessVersion         string  `json:"harness_version,omitempty"`
+	Cwd                    string  `json:"cwd,omitempty"`
 	ParentHarnessSessionID *string `json:"parent_harness_session_id,omitempty"`
 }
 
@@ -60,9 +63,10 @@ func providerFor(sourceFormat string) (string, bool) {
 	}
 }
 
-// BuildTurn converts an exchange into a tapes ingest request body.
+// BuildTurn converts an exchange into a tapes ingest request body. keyNames
+// maps client API key caller scopes to names (see config.CallerScope).
 // It returns an error for exchanges tapes cannot parse.
-func BuildTurn(x capture.Exchange, defaultAgentName string) ([]byte, error) {
+func BuildTurn(x capture.Exchange, keyNames map[string]string) ([]byte, error) {
 	provider, ok := providerFor(x.SourceFormat)
 	if !ok {
 		return nil, fmt.Errorf("unsupported client protocol %q (tapes accepts openai and anthropic)", x.SourceFormat)
@@ -71,8 +75,7 @@ func BuildTurn(x capture.Exchange, defaultAgentName string) ([]byte, error) {
 		return nil, fmt.Errorf("request body is not JSON")
 	}
 
-	s := identifySession(x.RequestHeaders, x.Request)
-	agentName := firstNonEmpty(s.AgentName, defaultAgentName)
+	id := identify(x.RequestHeaders, x.Request, x.CallerScope, keyNames)
 	contentType := "application/json"
 	if x.Stream {
 		contentType = "text/event-stream"
@@ -80,7 +83,7 @@ func BuildTurn(x capture.Exchange, defaultAgentName string) ([]byte, error) {
 
 	turn := turnPayload{
 		Provider:            provider,
-		AgentName:           agentName,
+		AgentName:           id.AgentName,
 		Request:             x.Request,
 		RawResponse:         x.Response,
 		RawResponseEncoding: "identity",
@@ -88,7 +91,7 @@ func BuildTurn(x capture.Exchange, defaultAgentName string) ([]byte, error) {
 			// request_id is tapes' dedupe key, so retried sends are idempotent.
 			RequestID:      "cliproxyapi-" + x.RequestID,
 			ContentType:    contentType,
-			ThreadID:       s.ThreadID,
+			ThreadID:       id.ThreadID,
 			Model:          x.Model,
 			Stream:         strconv.FormatBool(x.Stream),
 			UpstreamStatus: x.StatusCode,
@@ -98,15 +101,18 @@ func BuildTurn(x capture.Exchange, defaultAgentName string) ([]byte, error) {
 			CapturedAt:     rfc3339(x.CompletedAt),
 		},
 		Session: sessionEnvelope{
-			HarnessID:        s.HarnessID,
-			HarnessSessionID: s.HarnessSessionID,
+			AuthSubject:      id.AuthSubject,
+			HarnessID:        id.HarnessID,
+			HarnessSessionID: id.HarnessSessionID,
+			HarnessVersion:   id.HarnessVersion,
+			Cwd:              id.Cwd,
 		},
 	}
 	if !x.StartedAt.IsZero() && x.CompletedAt.After(x.StartedAt) {
 		turn.Meta.ElapsedSeconds = x.CompletedAt.Sub(x.StartedAt).Seconds()
 	}
-	if s.ParentHarnessSessionID != "" {
-		turn.Session.ParentHarnessSessionID = &s.ParentHarnessSessionID
+	if id.ParentHarnessSessionID != "" {
+		turn.Session.ParentHarnessSessionID = &id.ParentHarnessSessionID
 	}
 	return json.Marshal(turn)
 }

@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/config"
 )
 
 // fakeTapes records turns POSTed to /v1/ingest.
@@ -55,7 +57,7 @@ func TestPluginRecordsStreamAndNonStreamTurns(t *testing.T) {
 
 	p := newPlugin(func(string, string, map[string]any) {})
 	reg := call(t, p, "plugin.register", map[string]any{
-		"config_yaml":    b64("enabled: true\ningest-url: " + srv.URL + "\nagent-name: homelab\n"),
+		"config_yaml":    b64("enabled: true\ningest-url: " + srv.URL + "\nkeys:\n  laptop: sk-laptop\n"),
 		"schema_version": 6,
 	})
 	if reg["schema_version"] != 6.0 {
@@ -72,6 +74,7 @@ func TestPluginRecordsStreamAndNonStreamTurns(t *testing.T) {
 	headers := map[string]any{"X-Claude-Code-Session-Id": []string{"cc-session"}}
 	call(t, p, "response.intercept_stream_chunk", map[string]any{
 		"RequestID": "req-stream", "SourceFormat": "openai", "Model": "gpt-x", "ChunkIndex": -1,
+		"Metadata":       map[string]any{"caller_scope": config.CallerScope("sk-laptop"), "request_path": "/v1/chat/completions"},
 		"RequestHeaders": headers, "OriginalRequest": b64(`{"model":"gpt-x","stream":true,"messages":[{"role":"user","content":"hi"}]}`),
 	})
 	for i, chunk := range []string{`{"choices":[{"delta":{"content":"he"}}]}`, `{"choices":[{"delta":{"content":"llo"}}]}`} {
@@ -110,7 +113,7 @@ func TestPluginRecordsStreamAndNonStreamTurns(t *testing.T) {
 	}
 
 	stream := byID["cliproxyapi-req-stream"]
-	if stream["provider"] != "openai" || stream["agent_name"] != "homelab" {
+	if stream["provider"] != "openai" || stream["agent_name"] != "laptop" {
 		t.Errorf("stream turn = %v", stream)
 	}
 	sse, _ := base64.StdEncoding.DecodeString(stream["raw_response"].(string))
@@ -118,7 +121,7 @@ func TestPluginRecordsStreamAndNonStreamTurns(t *testing.T) {
 	if string(sse) != wantSSE {
 		t.Errorf("raw_response = %q, want %q", sse, wantSSE)
 	}
-	if s := stream["session"].(map[string]any); s["harness_id"] != "claude" || s["harness_session_id"] != "cc-session" {
+	if s := stream["session"].(map[string]any); s["auth_subject"] != "laptop" || s["harness_session_id"] != "cc-session" {
 		t.Errorf("session = %v", s)
 	}
 

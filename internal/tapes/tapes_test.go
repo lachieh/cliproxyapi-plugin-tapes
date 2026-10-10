@@ -30,6 +30,7 @@ func TestBuildTurnStreamingClaude(t *testing.T) {
 	x := capture.Exchange{
 		RequestID:    "abc",
 		SourceFormat: "claude",
+		CallerScope:  config.CallerScope("sk-laptop"),
 		Model:        "claude-sonnet-5-5",
 		Stream:       true,
 		RequestHeaders: http.Header{
@@ -37,19 +38,19 @@ func TestBuildTurnStreamingClaude(t *testing.T) {
 			"X-Claude-Code-Session-Id": {"sess-1"},
 			"X-Claude-Code-Agent-Id":   {"agent-7"},
 		},
-		Request:     []byte(`{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"hi"}],"stream":true}`),
+		Request:     []byte(`{"model":"claude-sonnet-5-5","system":[{"type":"text","text":"Env:\nPrimary working directory: /src/myproj\nIs git repo: yes"}],"messages":[{"role":"user","content":"hi"}],"stream":true}`),
 		Response:    []byte(sse),
 		StatusCode:  200,
 		StartedAt:   time.Date(2026, 10, 8, 10, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2026, 10, 8, 10, 0, 2, 0, time.UTC),
 	}
-	raw, err := BuildTurn(x, "cliproxyapi")
+	raw, err := BuildTurn(x, map[string]string{config.CallerScope("sk-laptop"): "laptop"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := decode(t, raw)
 
-	if got["provider"] != "anthropic" || got["agent_name"] != "cliproxyapi" || got["raw_response_encoding"] != "identity" {
+	if got["provider"] != "anthropic" || got["agent_name"] != "laptop/claude" || got["raw_response_encoding"] != "identity" {
 		t.Errorf("turn = %v", got)
 	}
 	if _, has := got["response"]; has {
@@ -73,14 +74,20 @@ func TestBuildTurnStreamingClaude(t *testing.T) {
 		}
 	}
 	sess := got["session"].(map[string]any)
-	if sess["harness_id"] != "claude" || sess["harness_session_id"] != "sess-1" {
-		t.Errorf("session = %v", sess)
+	wantSession := map[string]any{
+		"auth_subject": "laptop", "harness_id": "claude", "harness_session_id": "sess-1",
+		"harness_version": "2.1.0", "cwd": "/src/myproj",
+	}
+	for k, v := range wantSession {
+		if sess[k] != v {
+			t.Errorf("session[%s] = %v, want %v", k, sess[k], v)
+		}
 	}
 }
 
 func TestBuildTurnProviders(t *testing.T) {
 	for format, want := range map[string]string{"openai": "openai", "openai-response": "openai", "claude": "anthropic"} {
-		raw, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`), Response: []byte(`{}`)}, "a")
+		raw, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`), Response: []byte(`{}`)}, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", format, err)
 		}
@@ -89,61 +96,95 @@ func TestBuildTurnProviders(t *testing.T) {
 		}
 	}
 	for _, format := range []string{"gemini", "gemini-cli", ""} {
-		if _, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`)}, "a"); err == nil {
+		if _, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`)}, nil); err == nil {
 			t.Errorf("%q: expected unsupported error", format)
 		}
 	}
-	if _, err := BuildTurn(capture.Exchange{SourceFormat: "openai", Request: []byte(`not json`)}, "a"); err == nil {
+	if _, err := BuildTurn(capture.Exchange{SourceFormat: "openai", Request: []byte(`not json`)}, nil); err == nil {
 		t.Error("expected error for non-JSON request")
 	}
 }
 
-func TestIdentifySession(t *testing.T) {
-	body := `{"messages":[{"role":"user","content":"hi"}]}`
+func TestIdentify(t *testing.T) {
+	laptop := config.CallerScope("sk-laptop")
+	keys := map[string]string{laptop: "laptop"}
+	claudeUA := http.Header{"User-Agent": {"claude-cli/2.1.0 (external, cli)"}}
 	cases := []struct {
-		name                   string
-		headers                http.Header
-		body                   string
-		harness, sessionID, ag string
+		name    string
+		headers http.Header
+		body    string
+		scope   string
+		want    identity
 	}{
 		{
-			name:    "explicit tapes headers win",
-			headers: http.Header{"X-Tapes-Harness-Id": {"mine"}, "X-Tapes-Harness-Session-Id": {"s1"}, "X-Tapes-Agent-Name": {"bot"}, "X-Claude-Code-Session-Id": {"ignored"}},
-			body:    body, harness: "mine", sessionID: "s1", ag: "bot",
+			name:    "named key and known tool",
+			headers: http.Header{"User-Agent": {"claude-cli/2.1.0 (external, cli)"}, "X-Claude-Code-Session-Id": {"cc-1"}},
+			scope:   laptop,
+			want:    identity{AgentName: "laptop/claude", AuthSubject: "laptop", HarnessID: "claude", HarnessVersion: "2.1.0", HarnessSessionID: "cc-1"},
 		},
 		{
-			name:    "claude code header",
-			headers: http.Header{"X-Claude-Code-Session-Id": {"cc-1"}},
-			body:    body, harness: "claude", sessionID: "cc-1",
+			name:    "known tool, unnamed key",
+			headers: http.Header{"User-Agent": {"codex_cli_rs/0.50.0 (Mac OS 15.0; arm64)"}, "session_id": {"cx-1"}},
+			body:    `{"input":[{"role":"user","content":[{"type":"input_text","text":"<environment_context>\n  <cwd>/home/me/proj</cwd>\n</environment_context>"}]}]}`,
+			scope:   config.CallerScope("sk-other"),
+			want:    identity{AgentName: "codex", HarnessID: "codex", HarnessVersion: "0.50.0", HarnessSessionID: "cx-1", Cwd: "/home/me/proj"},
 		},
 		{
-			name: "claude code metadata json",
-			body: `{"metadata":{"user_id":"{\"device_id\":\"d\",\"session_id\":\"cc-2\"}"}}`, harness: "claude", sessionID: "cc-2",
+			name:  "named key, unknown tool",
+			body:  `{"messages":[{"role":"user","content":"hi"}]}`,
+			scope: laptop,
+			want:  identity{AgentName: "laptop", AuthSubject: "laptop", HarnessID: "cliproxyapi", HarnessSessionID: conversationFingerprint([]byte(`{"messages":[{"role":"user","content":"hi"}]}`))},
 		},
 		{
-			name: "claude code legacy metadata",
-			body: `{"metadata":{"user_id":"user_ab12_account__session_01a06a06-e830-7da9-a866-98470a94389c"}}`, harness: "claude", sessionID: "01a06a06-e830-7da9-a866-98470a94389c",
+			name: "nothing known",
+			body: `{"messages":[{"role":"user","content":"hi"}]}`,
+			want: identity{AgentName: "unknown", HarnessID: "cliproxyapi", HarnessSessionID: conversationFingerprint([]byte(`{"messages":[{"role":"user","content":"hi"}]}`))},
 		},
 		{
-			name:    "codex session header",
-			headers: http.Header{"session_id": {"cx-1"}, "User-Agent": {"codex_cli_rs/0.50.0"}},
-			body:    `{"input":[]}`, harness: "codex", sessionID: "cx-1",
+			name:    "claude session from metadata json",
+			headers: claudeUA,
+			body:    `{"metadata":{"user_id":"{\"device_id\":\"d\",\"session_id\":\"cc-2\"}"}}`,
+			want:    identity{AgentName: "claude", HarnessID: "claude", HarnessVersion: "2.1.0", HarnessSessionID: "cc-2"},
 		},
 		{
-			name:    "prompt cache key",
+			name:    "claude session from legacy metadata",
+			headers: claudeUA,
+			body:    `{"metadata":{"user_id":"user_ab12_account__session_01a06a06-e830-7da9-a866-98470a94389c"}}`,
+			want:    identity{AgentName: "claude", HarnessID: "claude", HarnessVersion: "2.1.0", HarnessSessionID: "01a06a06-e830-7da9-a866-98470a94389c"},
+		},
+		{
+			name:    "codex prompt cache key",
 			headers: http.Header{"User-Agent": {"codex_cli_rs/0.50.0"}},
-			body:    `{"prompt_cache_key":"pck-1","input":[]}`, harness: "codex", sessionID: "pck-1",
+			body:    `{"prompt_cache_key":"pck-1","input":[]}`,
+			want:    identity{AgentName: "codex", HarnessID: "codex", HarnessVersion: "0.50.0", HarnessSessionID: "pck-1"},
 		},
 		{
-			name: "unknown client falls back to fingerprint",
-			body: body, harness: "cliproxyapi", sessionID: conversationFingerprint([]byte(body)),
+			name:    "opencode working directory",
+			headers: http.Header{"User-Agent": {"opencode/0.15.2"}},
+			body:    `{"messages":[{"role":"system","content":"<env>\n  Working directory: /work/site\n</env>"}]}`,
+			want:    identity{AgentName: "opencode", HarnessID: "opencode", HarnessVersion: "0.15.2", Cwd: "/work/site", HarnessSessionID: conversationFingerprint([]byte(`{"messages":[{"role":"system","content":"<env>\n  Working directory: /work/site\n</env>"}]}`))},
+		},
+		{
+			name:    "windows working directory",
+			headers: claudeUA,
+			body:    `{"system":"Primary working directory: C:\\Users\\me\\proj\nPlatform: win32"}`,
+			want:    identity{AgentName: "claude", HarnessID: "claude", HarnessVersion: "2.1.0", Cwd: `C:\Users\me\proj`, HarnessSessionID: conversationFingerprint([]byte(`{"system":"Primary working directory: C:\\Users\\me\\proj\nPlatform: win32"}`))},
+		},
+		{
+			name: "x-tapes headers override detection",
+			headers: http.Header{
+				"User-Agent": {"claude-cli/2.1.0"}, "X-Claude-Code-Session-Id": {"cc-1"},
+				"X-Tapes-Agent-Name": {"bot"}, "X-Tapes-Harness-Id": {"mine"}, "X-Tapes-Harness-Version": {"9"},
+				"X-Tapes-Harness-Session-Id": {"s1"}, "X-Tapes-Parent-Harness-Session-Id": {"p1"}, "X-Tapes-Cwd": {"/x"},
+			},
+			scope: laptop,
+			want:  identity{AgentName: "bot", AuthSubject: "laptop", HarnessID: "mine", HarnessVersion: "9", HarnessSessionID: "s1", ParentHarnessSessionID: "p1", Cwd: "/x"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := identifySession(tc.headers, []byte(tc.body))
-			if s.HarnessID != tc.harness || s.HarnessSessionID != tc.sessionID || s.AgentName != tc.ag {
-				t.Errorf("got %+v", s)
+			if got := identify(tc.headers, []byte(tc.body), tc.scope, keys); got != tc.want {
+				t.Errorf("got  %+v\nwant %+v", got, tc.want)
 			}
 		})
 	}

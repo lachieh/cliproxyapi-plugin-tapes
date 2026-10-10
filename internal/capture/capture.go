@@ -16,6 +16,12 @@ import (
 // wire keys are the Go field names. Only the fields this plugin reads are
 // declared.
 
+// Metadata is the host's per-request metadata map.
+type Metadata struct {
+	// CallerScope identifies the client API key that authenticated the request.
+	CallerScope string `json:"caller_scope"`
+}
+
 // ResponseIntercept is the response.intercept_after payload.
 type ResponseIntercept struct {
 	RequestID       string
@@ -26,6 +32,7 @@ type ResponseIntercept struct {
 	OriginalRequest []byte
 	Body            []byte
 	StatusCode      int
+	Metadata        Metadata
 }
 
 // StreamChunk is the response.intercept_stream_chunk payload.
@@ -37,6 +44,7 @@ type StreamChunk struct {
 	OriginalRequest []byte
 	Body            []byte
 	ChunkIndex      int
+	Metadata        Metadata
 }
 
 // streamHeaderInitIndex marks the header-only call that precedes a stream's
@@ -59,6 +67,7 @@ type Exchange struct {
 	SourceFormat   string
 	Model          string
 	Stream         bool
+	CallerScope    string
 	RequestHeaders http.Header
 	Request        []byte
 	// Response is the JSON body, or for streams the SSE stream as sent to the client.
@@ -100,6 +109,7 @@ func (r *Recorder) ObserveResponse(ev ResponseIntercept, now time.Time) {
 			RequestID:      ev.RequestID,
 			SourceFormat:   ev.SourceFormat,
 			Model:          ev.Model,
+			CallerScope:    ev.Metadata.CallerScope,
 			RequestHeaders: ev.RequestHeaders,
 			Request:        ev.OriginalRequest,
 			Response:       ev.Body,
@@ -126,6 +136,7 @@ func (r *Recorder) ObserveStreamChunk(ev StreamChunk, now time.Time) {
 				SourceFormat:   ev.SourceFormat,
 				Model:          ev.Model,
 				Stream:         true,
+				CallerScope:    ev.Metadata.CallerScope,
 				RequestHeaders: ev.RequestHeaders,
 				Request:        ev.OriginalRequest,
 			},

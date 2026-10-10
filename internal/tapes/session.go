@@ -9,65 +9,124 @@ import (
 	"strings"
 )
 
-// session identifies which harness session a turn belongs to. tapes groups
-// turns into sessions by (harness_id, harness_session_id).
-type session struct {
+// harnessFallback is the harness_id for clients that aren't recognized.
+// tapes' own "unknown" is not usable here: over the ingest API, tapes stores
+// such turns without a session and never derives them.
+const harnessFallback = "cliproxyapi"
+
+// agentUnknown is the agent_name when neither the key nor the tool is known.
+const agentUnknown = "unknown"
+
+// identity is what is known about who sent a request, expressed in tapes'
+// own fields.
+type identity struct {
+	// AgentName is tapes' agent_name: "<key name>/<harness>", whichever parts are known.
+	AgentName string
+	// AuthSubject is the name of the client API key the request used.
+	AuthSubject            string
 	HarnessID              string
+	HarnessVersion         string
 	HarnessSessionID       string
 	ParentHarnessSessionID string
+	// Cwd is the project directory the coding agent is working in.
+	Cwd string
 	// ThreadID marks a subagent's turns within the session.
-	ThreadID  string
-	AgentName string
+	ThreadID string
 }
 
-var claudeLegacyUserID = regexp.MustCompile(`_session_([0-9a-fA-F-]{36})`)
+// harnesses identifies coding agents by User-Agent, using tapes' harness ids.
+var harnesses = []struct {
+	marker, id string
+}{
+	{"claude-cli", "claude"},
+	{"claude-code", "claude"},
+	{"codex", "codex"},
+	{"opencode", "opencode"},
+	{"gemini-cli", "gemini"},
+}
 
-// identifySession derives the session from what coding agents already send.
-// Explicit x-tapes-* headers win, so any client can opt into precise
-// grouping. Without any identifier the session falls back to a hash of the
-// conversation's opening, which stays stable as later turns resend history.
-func identifySession(headers http.Header, request []byte) session {
-	s := session{
-		HarnessID:              header(headers, "X-Tapes-Harness-Id"),
-		HarnessSessionID:       header(headers, "X-Tapes-Harness-Session-Id"),
-		ParentHarnessSessionID: header(headers, "X-Tapes-Parent-Harness-Session-Id"),
-		ThreadID:               header(headers, "X-Claude-Code-Agent-Id"),
-		AgentName:              header(headers, "X-Tapes-Agent-Name"),
+var (
+	userAgentVersion   = regexp.MustCompile(`^[^/\s]+[/\s]v?(\d[\w.+-]*)`)
+	claudeLegacyUserID = regexp.MustCompile(`_session_([0-9a-fA-F-]{36})`)
+	// Coding agents state the working directory in their prompts: Claude Code
+	// and OpenCode in the system prompt, Codex in an <environment_context>
+	// message. These match the JSON-encoded request, so a path ends at an
+	// escaped newline, a quote or a tag.
+	cwdPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`Primary working directory: ((?:[^"\\<]|\\\\)+)`),
+		regexp.MustCompile(`<cwd>((?:[^"\\<]|\\\\)+)</cwd>`),
+		regexp.MustCompile(`Working directory: ((?:[^"\\<]|\\\\)+)`),
 	}
-	if s.HarnessID == "" {
-		s.HarnessID = harnessFromUserAgent(header(headers, "User-Agent"))
+)
+
+// identify works out the request's identity from what coding agents already
+// send. Explicit x-tapes-* headers, the same ones tapes' own proxy reads,
+// override anything detected.
+func identify(headers http.Header, request []byte, callerScope string, keyNames map[string]string) identity {
+	id := identity{
+		AuthSubject:      keyNames[callerScope],
+		ThreadID:         header(headers, "X-Claude-Code-Agent-Id"),
+		HarnessSessionID: sessionID(headers, request),
+		Cwd:              projectDir(request),
 	}
-	if s.HarnessSessionID != "" {
-		return s
+	ua := strings.ToLower(header(headers, "User-Agent"))
+	id.HarnessID = harnessFallback
+	for _, h := range harnesses {
+		if strings.Contains(ua, h.marker) {
+			id.HarnessID = h.id
+			if m := userAgentVersion.FindStringSubmatch(ua); m != nil {
+				id.HarnessVersion = m[1]
+			}
+			break
+		}
 	}
 
+	override := func(field *string, name string) {
+		if v := header(headers, name); v != "" {
+			*field = v
+		}
+	}
+	override(&id.HarnessID, "X-Tapes-Harness-Id")
+	override(&id.HarnessVersion, "X-Tapes-Harness-Version")
+	override(&id.HarnessSessionID, "X-Tapes-Harness-Session-Id")
+	override(&id.ParentHarnessSessionID, "X-Tapes-Parent-Harness-Session-Id")
+	override(&id.Cwd, "X-Tapes-Cwd")
+
+	var parts []string
+	if id.AuthSubject != "" {
+		parts = append(parts, id.AuthSubject)
+	}
+	if id.HarnessID != harnessFallback {
+		parts = append(parts, id.HarnessID)
+	}
+	id.AgentName = strings.Join(parts, "/")
+	if id.AgentName == "" {
+		id.AgentName = agentUnknown
+	}
+	override(&id.AgentName, "X-Tapes-Agent-Name")
+	return id
+}
+
+// sessionID returns the session ID a coding agent sent, or else a
+// fingerprint of the conversation.
+func sessionID(headers http.Header, request []byte) string {
+	if v := firstNonEmpty(
+		header(headers, "X-Claude-Code-Session-Id"),
+		header(headers, "Session_id"),
+		header(headers, "Session-Id"),
+		header(headers, "X-Session-Id"),
+	); v != "" {
+		return v
+	}
 	var body struct {
 		Metadata struct {
 			UserID string `json:"user_id"`
 		} `json:"metadata"`
+		// Codex sets prompt_cache_key to its conversation ID.
 		PromptCacheKey string `json:"prompt_cache_key"`
 	}
 	_ = json.Unmarshal(request, &body)
-
-	switch {
-	case header(headers, "X-Claude-Code-Session-Id") != "":
-		s.HarnessSessionID = header(headers, "X-Claude-Code-Session-Id")
-		s.HarnessID = "claude"
-	case claudeSessionFromUserID(body.Metadata.UserID) != "":
-		s.HarnessSessionID = claudeSessionFromUserID(body.Metadata.UserID)
-		s.HarnessID = "claude"
-	case header(headers, "Session_id") != "" || header(headers, "Session-Id") != "":
-		s.HarnessSessionID = firstNonEmpty(header(headers, "Session_id"), header(headers, "Session-Id"))
-		s.HarnessID = "codex"
-	case header(headers, "X-Session-Id") != "":
-		s.HarnessSessionID = header(headers, "X-Session-Id")
-	case body.PromptCacheKey != "":
-		// Codex sets prompt_cache_key to its conversation ID.
-		s.HarnessSessionID = body.PromptCacheKey
-	default:
-		s.HarnessSessionID = conversationFingerprint(request)
-	}
-	return s
+	return firstNonEmpty(claudeSessionFromUserID(body.Metadata.UserID), body.PromptCacheKey, conversationFingerprint(request))
 }
 
 // claudeSessionFromUserID reads the session from Claude Code's
@@ -89,20 +148,13 @@ func claudeSessionFromUserID(userID string) string {
 	return ""
 }
 
-func harnessFromUserAgent(ua string) string {
-	ua = strings.ToLower(ua)
-	for _, known := range []struct{ marker, harness string }{
-		{"claude-cli", "claude"},
-		{"claude-code", "claude"},
-		{"codex", "codex"},
-		{"opencode", "opencode"},
-		{"gemini-cli", "gemini"},
-	} {
-		if strings.Contains(ua, known.marker) {
-			return known.harness
+func projectDir(request []byte) string {
+	for _, re := range cwdPatterns {
+		if m := re.FindSubmatch(request); m != nil {
+			return strings.TrimSpace(strings.ReplaceAll(string(m[1]), `\\`, `\`))
 		}
 	}
-	return "cliproxyapi"
+	return ""
 }
 
 // conversationFingerprint hashes the system prompt and first message of a
