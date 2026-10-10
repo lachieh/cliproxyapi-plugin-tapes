@@ -44,7 +44,7 @@ func TestBuildTurnStreamingClaude(t *testing.T) {
 		StartedAt:   time.Date(2026, 10, 8, 10, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2026, 10, 8, 10, 0, 2, 0, time.UTC),
 	}
-	raw, err := BuildTurn(x, map[string]string{config.CallerScope("sk-laptop"): "laptop"})
+	raw, err := BuildTurn(x, Names{Keys: map[string]string{config.CallerScope("sk-laptop"): "laptop"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestBuildTurnStreamingClaude(t *testing.T) {
 
 func TestBuildTurnProviders(t *testing.T) {
 	for format, want := range map[string]string{"openai": "openai", "openai-response": "openai", "claude": "anthropic"} {
-		raw, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`), Response: []byte(`{}`)}, nil)
+		raw, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`), Response: []byte(`{}`)}, Names{})
 		if err != nil {
 			t.Fatalf("%s: %v", format, err)
 		}
@@ -96,18 +96,18 @@ func TestBuildTurnProviders(t *testing.T) {
 		}
 	}
 	for _, format := range []string{"gemini", "gemini-cli", ""} {
-		if _, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`)}, nil); err == nil {
+		if _, err := BuildTurn(capture.Exchange{SourceFormat: format, Request: []byte(`{}`)}, Names{}); err == nil {
 			t.Errorf("%q: expected unsupported error", format)
 		}
 	}
-	if _, err := BuildTurn(capture.Exchange{SourceFormat: "openai", Request: []byte(`not json`)}, nil); err == nil {
+	if _, err := BuildTurn(capture.Exchange{SourceFormat: "openai", Request: []byte(`not json`)}, Names{}); err == nil {
 		t.Error("expected error for non-JSON request")
 	}
 }
 
 func TestIdentify(t *testing.T) {
 	laptop := config.CallerScope("sk-laptop")
-	keys := map[string]string{laptop: "laptop"}
+	names := Names{Keys: map[string]string{laptop: "laptop"}, FallbackAgent: "cpa"}
 	claudeUA := http.Header{"User-Agent": {"claude-cli/2.1.0 (external, cli)"}}
 	cases := []struct {
 		name    string
@@ -138,7 +138,7 @@ func TestIdentify(t *testing.T) {
 		{
 			name: "nothing known",
 			body: `{"messages":[{"role":"user","content":"hi"}]}`,
-			want: identity{AgentName: "unknown", HarnessID: "cliproxyapi", HarnessSessionID: conversationFingerprint([]byte(`{"messages":[{"role":"user","content":"hi"}]}`))},
+			want: identity{AgentName: "cpa", HarnessID: "cliproxyapi", HarnessSessionID: conversationFingerprint([]byte(`{"messages":[{"role":"user","content":"hi"}]}`))},
 		},
 		{
 			name:    "claude session from metadata json",
@@ -183,7 +183,7 @@ func TestIdentify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := identify(tc.headers, []byte(tc.body), tc.scope, keys); got != tc.want {
+			if got := identify(tc.headers, []byte(tc.body), tc.scope, names); got != tc.want {
 				t.Errorf("got  %+v\nwant %+v", got, tc.want)
 			}
 		})

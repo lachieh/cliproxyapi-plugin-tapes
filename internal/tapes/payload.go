@@ -63,10 +63,9 @@ func providerFor(sourceFormat string) (string, bool) {
 	}
 }
 
-// BuildTurn converts an exchange into a tapes ingest request body. keyNames
-// maps client API key caller scopes to names (see config.CallerScope).
-// It returns an error for exchanges tapes cannot parse.
-func BuildTurn(x capture.Exchange, keyNames map[string]string) ([]byte, error) {
+// BuildTurn converts an exchange into a tapes ingest request body, naming it
+// with names. It returns an error for exchanges tapes cannot parse.
+func BuildTurn(x capture.Exchange, names Names) ([]byte, error) {
 	provider, ok := providerFor(x.SourceFormat)
 	if !ok {
 		return nil, fmt.Errorf("unsupported client protocol %q (tapes accepts openai and anthropic)", x.SourceFormat)
@@ -75,7 +74,7 @@ func BuildTurn(x capture.Exchange, keyNames map[string]string) ([]byte, error) {
 		return nil, fmt.Errorf("request body is not JSON")
 	}
 
-	id := identify(x.RequestHeaders, x.Request, x.CallerScope, keyNames)
+	id := identify(x.RequestHeaders, x.Request, x.CallerScope, names)
 	contentType := "application/json"
 	if x.Stream {
 		contentType = "text/event-stream"

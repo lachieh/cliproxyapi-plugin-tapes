@@ -56,7 +56,8 @@ plugins:
 | Key | Default | Description |
 | --- | --- | --- |
 | `ingest-url` | `http://localhost:8082` | Your tapes ingest API. A base URL gets `/v1/ingest` appended. |
-| `keys` | none | Names for your client API keys (`name: key`). The name is recorded as the session's auth subject and in the agent name. The keys themselves are never sent to tapes. |
+| `keys` | none | Names for your client API keys (`name: key`). The name is recorded as the session's auth subject and in the agent name. The keys themselves are never sent to tapes. The names the management panel shows for keys can't be reused here: the panel keeps them in your browser and never sends them to CLIProxyAPI. |
+| `fallback-agent-name` | `cliproxyapi` | `agent_name` for requests from an unnamed key and an unrecognized tool. |
 | `headers` | none | Extra headers for each ingest request, such as `Authorization` for a gateway in front of tapes. |
 | `timeout-seconds` | `10` | Timeout for each ingest request. |
 | `queue-size` | `256` | Turns buffered while tapes is slow. Turns beyond this are dropped and a warning is logged. |
@@ -103,7 +104,7 @@ The plugin fills tapes' own session fields from what coding agents already send:
 | `harness_version` | The tool's version, from `User-Agent`. |
 | `auth_subject` | The name of the client API key, from `keys`. |
 | `cwd` | The project directory, read from the prompt (Claude Code, OpenCode and Codex state it). |
-| `agent_name` | `<key name>/<tool>`, e.g. `laptop/claude`. If only one is known, just that one; if neither, `unknown`. |
+| `agent_name` | `<key name>/<tool>`, e.g. `laptop/claude`. If only one is known, just that one; if neither, `fallback-agent-name` (`cliproxyapi` by default). |
 | `harness_session_id` | Taken from the first of these that is available. |
 
 The session ID sources, in order:

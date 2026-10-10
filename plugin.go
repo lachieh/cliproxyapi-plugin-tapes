@@ -39,8 +39,8 @@ type plugin struct {
 	recorder *capture.Recorder
 	now      func() time.Time
 
-	sender   atomic.Pointer[tapes.Sender]
-	keyNames atomic.Pointer[map[string]string]
+	sender atomic.Pointer[tapes.Sender]
+	names  atomic.Pointer[tapes.Names]
 
 	configMu sync.Mutex
 	config   *config.Config
@@ -120,7 +120,7 @@ func (p *plugin) configure(raw []byte) {
 		return
 	}
 	p.config = &cfg
-	p.keyNames.Store(&cfg.KeyNames)
+	p.names.Store(&tapes.Names{Keys: cfg.KeyNames, FallbackAgent: cfg.FallbackAgentName})
 	if old := p.sender.Swap(tapes.NewSender(cfg, p.log)); old != nil {
 		go closeSender(old)
 	}
@@ -133,11 +133,11 @@ func (p *plugin) record(x capture.Exchange) {
 	if sender == nil {
 		return
 	}
-	var keyNames map[string]string
-	if m := p.keyNames.Load(); m != nil {
-		keyNames = *m
+	var names tapes.Names
+	if n := p.names.Load(); n != nil {
+		names = *n
 	}
-	turn, err := tapes.BuildTurn(x, keyNames)
+	turn, err := tapes.BuildTurn(x, names)
 	if err != nil {
 		p.log("debug", "tapes: skipping request", map[string]any{"request_id": x.RequestID, "reason": err.Error()})
 		return

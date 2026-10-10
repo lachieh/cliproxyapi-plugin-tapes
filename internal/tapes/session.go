@@ -14,8 +14,13 @@ import (
 // such turns without a session and never derives them.
 const harnessFallback = "cliproxyapi"
 
-// agentUnknown is the agent_name when neither the key nor the tool is known.
-const agentUnknown = "unknown"
+// Names configures how requests are named in tapes.
+type Names struct {
+	// Keys maps client API key caller scopes to names (see config.CallerScope).
+	Keys map[string]string
+	// FallbackAgent is the agent_name when neither the key nor the tool is known.
+	FallbackAgent string
+}
 
 // identity is what is known about who sent a request, expressed in tapes'
 // own fields.
@@ -62,9 +67,9 @@ var (
 // identify works out the request's identity from what coding agents already
 // send. Explicit x-tapes-* headers, the same ones tapes' own proxy reads,
 // override anything detected.
-func identify(headers http.Header, request []byte, callerScope string, keyNames map[string]string) identity {
+func identify(headers http.Header, request []byte, callerScope string, names Names) identity {
 	id := identity{
-		AuthSubject:      keyNames[callerScope],
+		AuthSubject:      names.Keys[callerScope],
 		ThreadID:         header(headers, "X-Claude-Code-Agent-Id"),
 		HarnessSessionID: sessionID(headers, request),
 		Cwd:              projectDir(request),
@@ -101,7 +106,7 @@ func identify(headers http.Header, request []byte, callerScope string, keyNames 
 	}
 	id.AgentName = strings.Join(parts, "/")
 	if id.AgentName == "" {
-		id.AgentName = agentUnknown
+		id.AgentName = names.FallbackAgent
 	}
 	override(&id.AgentName, "X-Tapes-Agent-Name")
 	return id

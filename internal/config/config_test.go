@@ -13,7 +13,7 @@ func TestParseDefaults(t *testing.T) {
 	if cfg.IngestEndpoint != "http://localhost:8082/v1/ingest" {
 		t.Errorf("endpoint = %q", cfg.IngestEndpoint)
 	}
-	if cfg.KeyNames != nil || cfg.Timeout != 10*time.Second || cfg.QueueSize != 256 {
+	if cfg.KeyNames != nil || cfg.FallbackAgentName != "cliproxyapi" || cfg.Timeout != 10*time.Second || cfg.QueueSize != 256 {
 		t.Errorf("defaults = %+v", cfg)
 	}
 }
@@ -41,6 +41,7 @@ func TestParseOverrides(t *testing.T) {
 	cfg, err := Parse([]byte(`
 keys:
   laptop: " sk-laptop "
+fallback-agent-name: homelab
 timeout-seconds: 3
 queue-size: 8
 headers:
@@ -49,7 +50,7 @@ headers:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.KeyNames[CallerScope("sk-laptop")] != "laptop" || cfg.Timeout != 3*time.Second || cfg.QueueSize != 8 || cfg.Headers["Authorization"] != "Bearer abc" {
+	if cfg.KeyNames[CallerScope("sk-laptop")] != "laptop" || cfg.FallbackAgentName != "homelab" || cfg.Timeout != 3*time.Second || cfg.QueueSize != 8 || cfg.Headers["Authorization"] != "Bearer abc" {
 		t.Errorf("cfg = %+v", cfg)
 	}
 }

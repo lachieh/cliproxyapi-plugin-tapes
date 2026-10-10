@@ -18,22 +18,29 @@ const DefaultIngestURL = "http://localhost:8082"
 
 const ingestPath = "/v1/ingest"
 
+// DefaultFallbackAgentName is the agent_name when neither the key nor the
+// coding tool is known.
+const DefaultFallbackAgentName = "cliproxyapi"
+
 type Config struct {
 	// IngestEndpoint is the full URL turns are POSTed to.
 	IngestEndpoint string
 	// KeyNames maps a client API key's caller scope to the name it is recorded under.
-	KeyNames  map[string]string
-	Headers   map[string]string
-	Timeout   time.Duration
-	QueueSize int
+	KeyNames map[string]string
+	// FallbackAgentName is the agent_name when neither the key nor the tool is known.
+	FallbackAgentName string
+	Headers           map[string]string
+	Timeout           time.Duration
+	QueueSize         int
 }
 
 type rawConfig struct {
-	IngestURL      string            `yaml:"ingest-url"`
-	Keys           map[string]string `yaml:"keys"`
-	Headers        map[string]string `yaml:"headers"`
-	TimeoutSeconds *int              `yaml:"timeout-seconds"`
-	QueueSize      *int              `yaml:"queue-size"`
+	IngestURL         string            `yaml:"ingest-url"`
+	Keys              map[string]string `yaml:"keys"`
+	FallbackAgentName string            `yaml:"fallback-agent-name"`
+	Headers           map[string]string `yaml:"headers"`
+	TimeoutSeconds    *int              `yaml:"timeout-seconds"`
+	QueueSize         *int              `yaml:"queue-size"`
 }
 
 // Parse reads the plugin config YAML and applies defaults. Unknown keys,
@@ -50,10 +57,14 @@ func Parse(data []byte) (Config, error) {
 	}
 
 	cfg := Config{
-		IngestEndpoint: endpoint,
-		Headers:        raw.Headers,
-		Timeout:        10 * time.Second,
-		QueueSize:      256,
+		IngestEndpoint:    endpoint,
+		FallbackAgentName: strings.TrimSpace(raw.FallbackAgentName),
+		Headers:           raw.Headers,
+		Timeout:           10 * time.Second,
+		QueueSize:         256,
+	}
+	if cfg.FallbackAgentName == "" {
+		cfg.FallbackAgentName = DefaultFallbackAgentName
 	}
 	for name, key := range raw.Keys {
 		name, key = strings.TrimSpace(name), strings.TrimSpace(key)
