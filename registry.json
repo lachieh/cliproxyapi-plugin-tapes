@@ -15,47 +15,92 @@
         "observability",
         "logging"
       ],
-      "version": "0.3.1",
+      "version": "0.4.0",
       "install": {
         "type": "direct",
         "artifacts": [
           {
             "goos": "darwin",
             "goarch": "amd64",
-            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_darwin_amd64.zip",
-            "sha256": "2fcdbb8fc1b7c6fd317a47236cda22b0d6b6ede52b1d095707ce59a211fb55dc",
-            "size": 2893210
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/tapes/v0.4.0/tapes_0.4.0_darwin_amd64.zip",
+            "sha256": "f74ab27b94abdca0beff39c7dba7051d2e75821e76c3d6d3cb4bf557ccc5ecf1",
+            "size": 2888358
           },
           {
             "goos": "darwin",
             "goarch": "arm64",
-            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_darwin_arm64.zip",
-            "sha256": "4a639d6d6ba9b580b35acb32d83bf2f382df2258f2e13dfe867eee412dea5400",
-            "size": 2665941
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/tapes/v0.4.0/tapes_0.4.0_darwin_arm64.zip",
+            "sha256": "9db2aaef66c0346bbe4d0bad98069aa0937d8fa4f5c307053acfd3455affab58",
+            "size": 2662474
           },
           {
             "goos": "linux",
             "goarch": "amd64",
-            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_linux_amd64.zip",
-            "sha256": "e18ea94674787b466c6dc360baed0964dbbe700e9e8585e3b1ea7d731624661b",
-            "size": 3046147
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/tapes/v0.4.0/tapes_0.4.0_linux_amd64.zip",
+            "sha256": "4a1d43d01df586ebff41ad26d0a0e9c2c38f5c78e33fd18f97843474363886cf",
+            "size": 3046954
           },
           {
             "goos": "linux",
             "goarch": "arm64",
-            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_linux_arm64.zip",
-            "sha256": "2bda6e06109185233fc546416ce42cbfe91f35d75f6cb25148e82f6f8be38ff5",
-            "size": 2765265
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/tapes/v0.4.0/tapes_0.4.0_linux_arm64.zip",
+            "sha256": "b2b52c496813fcb9a2d1aad7211cb0b9334512a5bac04f63d2cffeb86257a6cf",
+            "size": 2767196
           },
           {
             "goos": "windows",
             "goarch": "amd64",
-            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_windows_amd64.zip",
-            "sha256": "be41255ee8f83024f23c302d09041b35f99da3a94afa8756fd1ce386ad5f42ca",
-            "size": 2947971
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/tapes/v0.4.0/tapes_0.4.0_windows_amd64.zip",
+            "sha256": "a45407885573851ac878818bb25eb2dd1ea028977329997e2269f82d7f1d1905",
+            "size": 2945754
           }
         ]
-      }
+      },
+      "versions": [
+        {
+          "version": "0.3.1",
+          "install": {
+            "type": "direct",
+            "artifacts": [
+              {
+                "goos": "darwin",
+                "goarch": "amd64",
+                "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_darwin_amd64.zip",
+                "sha256": "2fcdbb8fc1b7c6fd317a47236cda22b0d6b6ede52b1d095707ce59a211fb55dc",
+                "size": 2893210
+              },
+              {
+                "goos": "darwin",
+                "goarch": "arm64",
+                "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_darwin_arm64.zip",
+                "sha256": "4a639d6d6ba9b580b35acb32d83bf2f382df2258f2e13dfe867eee412dea5400",
+                "size": 2665941
+              },
+              {
+                "goos": "linux",
+                "goarch": "amd64",
+                "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_linux_amd64.zip",
+                "sha256": "e18ea94674787b466c6dc360baed0964dbbe700e9e8585e3b1ea7d731624661b",
+                "size": 3046147
+              },
+              {
+                "goos": "linux",
+                "goarch": "arm64",
+                "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_linux_arm64.zip",
+                "sha256": "2bda6e06109185233fc546416ce42cbfe91f35d75f6cb25148e82f6f8be38ff5",
+                "size": 2765265
+              },
+              {
+                "goos": "windows",
+                "goarch": "amd64",
+                "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/v0.3.1/tapes_0.3.1_windows_amd64.zip",
+                "sha256": "be41255ee8f83024f23c302d09041b35f99da3a94afa8756fd1ce386ad5f42ca",
+                "size": 2947971
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
