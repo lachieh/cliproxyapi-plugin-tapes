@@ -9,17 +9,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/capture"
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/config"
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/tapes"
+	"github.com/lachieh/cliproxyapi-plugins/internal/cabi"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/capture"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/config"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/tapes"
 )
 
-// pluginVersion is set at release build time with -ldflags "-X main.pluginVersion=...".
-var pluginVersion = "0.0.0-dev"
+// version is set at release build time with -ldflags "-X main.version=...".
+var version = "0.0.0-dev"
 
 const (
-	repository = "https://github.com/lachieh/cliproxyapi-plugin-tapes"
-	logo       = "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugin-tapes/main/assets/icon.svg"
+	repository = "https://github.com/lachieh/cliproxyapi-plugins"
+	logo       = "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugins/main/plugins/tapes/assets/icon.svg"
 
 	// maxSchemaVersion is the newest host plugin schema this plugin understands.
 	// From schema 3 the host omits request bodies from stream payload chunks,
@@ -96,13 +97,9 @@ func (p *plugin) handle(method string, request []byte) (any, error) {
 		return struct{}{}, nil
 
 	default:
-		return nil, errUnknownMethod{method}
+		return nil, &cabi.Error{Code: "unknown_method", Message: "unknown method " + method}
 	}
 }
-
-type errUnknownMethod struct{ method string }
-
-func (e errUnknownMethod) Error() string { return "unknown method " + e.method }
 
 // configure applies a new config. An invalid config is logged and the
 // previous one kept, so the plugin stays registered and its settings stay
@@ -184,7 +181,7 @@ func registration(hostSchemaVersion int) map[string]any {
 		"schema_version": schema,
 		"metadata": map[string]any{
 			"Name":             "tapes",
-			"Version":          pluginVersion,
+			"Version":          version,
 			"Author":           "Lachlan Heywood",
 			"GitHubRepository": repository,
 			"Logo":             logo,

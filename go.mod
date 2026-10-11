@@ -1,4 +1,4 @@
-module github.com/lachieh/cliproxyapi-plugin-tapes
+module github.com/lachieh/cliproxyapi-plugins
 
 go 1.26
 

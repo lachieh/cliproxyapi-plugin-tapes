@@ -1,4 +1,3 @@
-plugins/
 dist/
 *.so
 *.dylib

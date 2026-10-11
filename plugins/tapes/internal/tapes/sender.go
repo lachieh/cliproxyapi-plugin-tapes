@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/config"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/config"
 )
 
 // Logger receives the sender's diagnostics. level is one of debug, info, warn.

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/capture"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/capture"
 )
 
 // The structs below mirror the subset of tapes' ingest contract

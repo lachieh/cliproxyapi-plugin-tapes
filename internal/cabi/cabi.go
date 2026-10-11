@@ -1,7 +1,7 @@
-// Command tapes is a CLIProxyAPI native plugin that records every proxied
-// LLM request/response to a tapes ingest server. Build with
-// -buildmode=c-shared; the host loads it through the C ABI below.
-package main
+// Package cabi is the C ABI shared by every plugin in this repository. A
+// plugin's main package calls Serve from init, and the library built with
+// -buildmode=c-shared exports cliproxy_plugin_init for the CLIProxyAPI host.
+package cabi
 
 /*
 #include <stdint.h>
@@ -62,27 +62,49 @@ import (
 
 const abiVersion = 1
 
+// Plugin is what a plugin gives Serve.
+type Plugin struct {
+	// Handle answers one host call. Its result is sent as the envelope's
+	// result; an error is sent as an error envelope (see Error).
+	Handle func(method string, request []byte) (any, error)
+	// Shutdown runs when the host unloads the library. It may be nil.
+	Shutdown func()
+}
+
+// Error is an error with an envelope code, such as "unknown_method" or
+// "invalid_config". Other errors are sent with the code "plugin_error".
+type Error struct {
+	Code    string
+	Message string
+}
+
+func (e *Error) Error() string { return e.Code + ": " + e.Message }
+
 var (
+	plugin Plugin
 	// hostAvailable guards host callbacks: the host frees its API table on unload.
 	hostAvailable atomic.Bool
-	instance      = newPlugin(hostLog)
 )
 
-func main() {}
+// ErrHostUnavailable is returned by CallHost before init or after shutdown.
+var ErrHostUnavailable = errors.New("host is not available")
+
+// Serve registers the plugin. Call it from the main package's init.
+func Serve(p Plugin) { plugin = p }
 
 //export cliproxy_plugin_init
-func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_api) C.int {
-	if plugin == nil {
+func cliproxy_plugin_init(host *C.cliproxy_host_api, api *C.cliproxy_plugin_api) C.int {
+	if api == nil {
 		return 1
 	}
 	if host != nil {
 		C.store_host_api(host)
 		hostAvailable.Store(true)
 	}
-	plugin.abi_version = C.uint32_t(abiVersion)
-	plugin.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
-	plugin.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
-	plugin.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
+	api.abi_version = C.uint32_t(abiVersion)
+	api.call = C.cliproxy_plugin_call_fn(C.cliproxyPluginCall)
+	api.free_buffer = C.cliproxy_plugin_free_fn(C.cliproxyPluginFree)
+	api.shutdown = C.cliproxy_plugin_shutdown_fn(C.cliproxyPluginShutdown)
 	return 0
 }
 
@@ -107,7 +129,7 @@ func cliproxyPluginCall(method *C.char, request *C.uint8_t, requestLen C.size_t,
 	if request != nil && requestLen > 0 {
 		body = C.GoBytes(unsafe.Pointer(request), C.int(requestLen))
 	}
-	raw, err := dispatch(C.GoString(method), body)
+	raw, err := Dispatch(C.GoString(method), body)
 	writeResponse(response, raw)
 	if err != nil {
 		return 1
@@ -124,19 +146,27 @@ func cliproxyPluginFree(ptr unsafe.Pointer, _ C.size_t) {
 
 //export cliproxyPluginShutdown
 func cliproxyPluginShutdown() {
-	instance.shutdown()
+	if plugin.Shutdown != nil {
+		plugin.Shutdown()
+	}
 	hostAvailable.Store(false)
 }
 
-// dispatch runs a host call and encodes the result as a response envelope.
-func dispatch(method string, request []byte) ([]byte, error) {
-	result, err := instance.handle(method, request)
+// Dispatch runs a host call through the registered plugin and encodes the
+// result as a response envelope. The host reads an error envelope the same
+// way whatever the return code, so errors are always enveloped.
+func Dispatch(method string, request []byte) ([]byte, error) {
+	if plugin.Handle == nil {
+		err := &Error{Code: "plugin_error", Message: "plugin did not call cabi.Serve"}
+		return errorEnvelope(err.Code, err.Message), err
+	}
+	result, err := plugin.Handle(method, request)
 	if err != nil {
-		code := "plugin_error"
-		if errors.As(err, new(errUnknownMethod)) {
-			code = "unknown_method"
+		var e *Error
+		if errors.As(err, &e) {
+			return errorEnvelope(e.Code, e.Message), err
 		}
-		return errorEnvelope(code, err.Error()), err
+		return errorEnvelope("plugin_error", err.Error()), err
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {
@@ -169,22 +199,49 @@ func writeResponse(response *C.cliproxy_buffer, raw []byte) {
 	response.len = C.size_t(len(raw))
 }
 
-// hostLog writes to the CLIProxyAPI log through the host.log callback.
-func hostLog(level, message string, fields map[string]any) {
+// CallHost invokes a host callback and returns its result. It is safe to call
+// from any goroutine, and returns ErrHostUnavailable once the host has unloaded
+// the library.
+func CallHost(method string, payload any) (json.RawMessage, error) {
 	if !hostAvailable.Load() {
-		return
+		return nil, ErrHostUnavailable
 	}
-	payload, err := json.Marshal(map[string]any{"level": level, "message": message, "fields": fields})
+	raw, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return nil, err
 	}
-	cMethod := C.CString("host.log")
+	cMethod := C.CString(method)
 	defer C.free(unsafe.Pointer(cMethod))
-	req := (*C.uint8_t)(C.CBytes(payload))
-	defer C.free(unsafe.Pointer(req))
+	var req *C.uint8_t
+	if len(raw) > 0 {
+		p := C.CBytes(raw)
+		defer C.free(p)
+		req = (*C.uint8_t)(p)
+	}
 	var response C.cliproxy_buffer
-	C.call_host_api(cMethod, req, C.size_t(len(payload)), &response)
+	code := C.call_host_api(cMethod, req, C.size_t(len(raw)), &response)
+	var out []byte
 	if response.ptr != nil {
+		out = C.GoBytes(response.ptr, C.int(response.len))
 		C.free_host_buffer(response.ptr, response.len)
 	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s: no response (code %d)", method, int(code))
+	}
+	var env envelope
+	if err := json.Unmarshal(out, &env); err != nil {
+		return nil, fmt.Errorf("%s: decode envelope: %w", method, err)
+	}
+	if !env.OK {
+		if env.Error != nil {
+			return nil, fmt.Errorf("%s: %s: %s", method, env.Error.Code, env.Error.Message)
+		}
+		return nil, fmt.Errorf("%s failed", method)
+	}
+	return env.Result, nil
+}
+
+// Log writes to the CLIProxyAPI log through the host.log callback.
+func Log(level, message string, fields map[string]any) {
+	_, _ = CallHost("host.log", map[string]any{"level": level, "message": message, "fields": fields})
 }

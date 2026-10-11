@@ -3,13 +3,15 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/config"
+	"github.com/lachieh/cliproxyapi-plugins/internal/cabi"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/config"
 )
 
 // fakeTapes records turns POSTed to /v1/ingest.
@@ -132,31 +134,28 @@ func TestPluginRecordsStreamAndNonStreamTurns(t *testing.T) {
 }
 
 func TestPluginKeepsRegisteringWithInvalidConfig(t *testing.T) {
-	var errors int
+	var errCount int
 	p := newPlugin(func(level, _ string, _ map[string]any) {
 		if level == "error" {
-			errors++
+			errCount++
 		}
 	})
 	reg := call(t, p, "plugin.register", map[string]any{"config_yaml": b64("ingest-url: not a url\n"), "schema_version": 2})
 	if reg["schema_version"] != 2.0 || reg["metadata"] == nil {
 		t.Errorf("registration = %v", reg)
 	}
-	if errors != 1 || p.sender.Load() != nil {
-		t.Errorf("errors=%d sender=%v", errors, p.sender.Load())
+	if errCount != 1 || p.sender.Load() != nil {
+		t.Errorf("errors=%d sender=%v", errCount, p.sender.Load())
 	}
 	p.shutdown()
 }
 
-func TestDispatchUnknownMethod(t *testing.T) {
-	raw, err := dispatch("model.static", nil)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	var env envelope
-	_ = json.Unmarshal(raw, &env)
-	if env.OK || env.Error == nil || env.Error.Code != "unknown_method" {
-		t.Errorf("envelope = %s", raw)
+func TestUnknownMethod(t *testing.T) {
+	p := newPlugin(func(string, string, map[string]any) {})
+	_, err := p.handle("model.static", nil)
+	var e *cabi.Error
+	if !errors.As(err, &e) || e.Code != "unknown_method" {
+		t.Errorf("err = %v", err)
 	}
 }
 

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/capture"
-	"github.com/lachieh/cliproxyapi-plugin-tapes/internal/config"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/capture"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/tapes/internal/config"
 )
 
 func decode(t *testing.T, raw []byte) map[string]any {
