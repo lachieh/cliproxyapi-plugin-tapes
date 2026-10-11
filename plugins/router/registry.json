@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "lachieh-router",
+      "name": "Lachieh Router",
+      "description": "Personal session routing: provider/model rules and sticky account preferences.",
+      "author": "lachieh",
+      "repository": "https://github.com/lachieh/cliproxyapi-plugin-lachieh",
+      "license": "UNLICENSED",
+      "tags": ["router", "scheduler"]
+    }
+  ]
+}
