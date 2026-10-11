@@ -1,0 +1,155 @@
+name: Build
+
+# Pull requests and pushes to main test and build every plugin. A tag named
+# <plugin directory>/v<version> (e.g. tapes/v0.4.0) builds that plugin,
+# publishes it as a GitHub release and records it in registry.json.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['*/v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      plugins: ${{ steps.plan.outputs.plugins }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: plan
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            dir="${GITHUB_REF_NAME%%/v*}"
+            version="${GITHUB_REF_NAME#*/v}"
+            if [[ "$GITHUB_REF_NAME" != "$dir/v$version" || ! -f "plugins/$dir/store.json" ]]; then
+              echo "::error::tag $GITHUB_REF_NAME does not name a plugin directory: want <dir>/v<version> with plugins/<dir>/store.json"
+              exit 1
+            fi
+            plugins="[\"$dir\"]"
+          else
+            version="0.0.0-dev"
+            plugins="$(ls plugins | jq -R . | jq -sc .)"
+          fi
+          echo "plugins=$plugins" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.plugin }} ${{ matrix.target.goos }}/${{ matrix.target.goarch }}
+    needs: [test, plan]
+    runs-on: ${{ matrix.target.runner }}
+    # Linux libraries are built on Debian bookworm, the base of the official
+    # CLIProxyAPI image, so they never need a newer glibc than the host has.
+    container: ${{ matrix.target.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.plan.outputs.plugins) }}
+        target:
+          - { goos: linux, goarch: amd64, runner: ubuntu-24.04, container: 'golang:1.26-bookworm', ext: so }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm, container: 'golang:1.26-bookworm', ext: so }
+          - { goos: darwin, goarch: arm64, runner: macos-15, ext: dylib }
+          - { goos: darwin, goarch: amd64, runner: macos-15, ext: dylib, cc: 'clang -arch x86_64' }
+          - { goos: windows, goarch: amd64, runner: windows-2025, ext: dll }
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: '1'
+      GOOS: ${{ matrix.target.goos }}
+      GOARCH: ${{ matrix.target.goarch }}
+      GOFLAGS: -buildvcs=false
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        if: matrix.target.container == ''
+        with:
+          go-version-file: go.mod
+      - name: Resolve plugin
+        run: |
+          set -euo pipefail
+          id="$(sed -n 's/^ *"id": *"\([^"]*\)".*/\1/p' "plugins/${{ matrix.plugin }}/store.json" | head -n1)"
+          [[ -n "$id" ]] || { echo "::error::no id in plugins/${{ matrix.plugin }}/store.json"; exit 1; }
+          echo "PLUGIN_ID=$id" >> "$GITHUB_ENV"
+          echo "ARCHIVE=${id}_${VERSION}_${{ matrix.target.goos }}_${{ matrix.target.goarch }}.zip" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          CC: ${{ matrix.target.cc }}
+        run: |
+          [[ -n "$CC" ]] || unset CC
+          mkdir -p dist
+          go build -trimpath -buildmode=c-shared \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "dist/${PLUGIN_ID}.${{ matrix.target.ext }}" "./plugins/${{ matrix.plugin }}"
+      - name: Package
+        # The packager runs on the build machine, not the target platform.
+        run: GOOS= GOARCH= CGO_ENABLED=0 go run ./scripts/package -library "dist/${PLUGIN_ID}.${{ matrix.target.ext }}" -archive "$ARCHIVE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
+          if-no-files-found: error
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    # Releases commit registry.json to main one at a time.
+    concurrency: registry
+    env:
+      PLUGIN_DIR: ${{ fromJSON(needs.plan.outputs.plugins)[0] }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat dist/*.sha256 | sort -k2 > dist/checksums.txt
+          cat dist/checksums.txt
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/checksums.txt \
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Record in registry.json
+        run: |
+          set -euo pipefail
+          go run ./scripts/registry -plugin "plugins/$PLUGIN_DIR" -version "$VERSION" -tag "$GITHUB_REF_NAME" -dist dist
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add registry.json
+          git commit -m "registry: $GITHUB_REF_NAME"
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          exit 1

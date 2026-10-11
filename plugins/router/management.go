@@ -10,7 +10,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 
-	"github.com/lachieh/cliproxyapi-plugin-lachieh/internal/router"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/router/internal/router"
 )
 
 // The UI is a static shell served as unauthenticated plugin resources. Everything it reads or

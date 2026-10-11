@@ -1,6 +1,6 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# cliproxyapi-plugin-lachieh
+# lachieh-router
 
 A personal [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) plugin, `lachieh-router`, that routes sessions by my preferences:
 
@@ -31,7 +31,7 @@ plugins:
   configs:
     lachieh-router:
       priority: 10
-      timezone: Australia/Sydney          # for hours/days; defaults to host local time
+      timezone: Europe/London             # for hours/days; defaults to host local time
       sticky_ttl: 6h                      # idle time before a session's pin expires
       session_headers: [X-Claude-Code-Session-Id]
       usage: { interval: 5m }             # how often to poll Claude/Codex usage (min 1m)
@@ -123,36 +123,23 @@ All routes require the management key (`Authorization: Bearer …`) and live und
 
 To read and write the config itself, use the host's `GET`/`PUT /v8/management/config/plugins/configs/lachieh-router`.
 
-## Development
+## Install
 
-```bash
-make test                        # rule engine and usage parser tests
-make build                       # dist/lachieh-router.{dylib,so}
-make install PLUGINS_DIR=...     # copy into <plugins.dir>/<goos>/<goarch>/
-make package VERSION=v0.1.0      # dist/lachieh-router_0.1.0_<goos>_<goarch>.zip
-```
-
-Restart CLIProxyAPI, or reinstall through the store, after replacing the library.
-
-## Private publishing
-
-Pushing a `v*` tag runs `.github/workflows/release.yml`. It builds darwin/linux × amd64/arm64 zips and `checksums.txt`, then publishes them as a GitHub release.
-
-The repo is private, so give CLIProxyAPI a read-only fine-grained token (Contents: read on this repo) and point the store at this repo's `registry.json`:
+Add this repository's store to CLIProxyAPI, then install **Lachieh Router** from the plugin store:
 
 ```yaml
 plugins:
   store-sources:
-    - "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugin-lachieh/main/registry.json"
-  store-auth:
-    - match: "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugin-lachieh/"
-      apply-to: ["registry"]
-      type: "github-token"
-      token-env: "LACHIEH_PLUGIN_GITHUB_TOKEN"
-    - match: "https://api.github.com/repos/lachieh/cliproxyapi-plugin-lachieh/"
-      apply-to: ["metadata", "artifact"]
-      type: "github-token"
-      token-env: "LACHIEH_PLUGIN_GITHUB_TOKEN"
+    - "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugins/main/registry.json"
 ```
 
-Then install or update with `POST /v0/management/plugin-store/lachieh-router/install`.
+## Development
+
+From the repository root:
+
+```bash
+go test ./plugins/router/...                                              # rule engine and usage parser tests
+CGO_ENABLED=1 go build -buildmode=c-shared -o dist/lachieh-router.so ./plugins/router
+```
+
+Copy the library into `<plugins.dir>/<goos>/<goarch>/` and restart CLIProxyAPI, or reinstall through the store. Releases are cut with a `router/v<version>` tag; see the repository README.

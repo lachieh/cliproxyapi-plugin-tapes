@@ -18,7 +18,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,7 +53,7 @@ func main() {
 	dist := flag.String("dist", "dist", "directory holding the release zips")
 	repo := flag.String("repo", "https://github.com/lachieh/cliproxyapi-plugins", "repository URL")
 	flag.Parse()
-	if *dir == "" || *ver == "" || *tag == "" {
+	if *dir == "" || *ver == "" || *tag == "" || strings.ContainsAny(*tag, " ?#%") {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -122,7 +121,7 @@ func collect(dist, id, ver, repo, tag string) ([]artifact, error) {
 		out = append(out, artifact{
 			GOOS:   platform[0],
 			GOARCH: platform[1],
-			URL:    repo + "/releases/download/" + url.PathEscape(tag) + "/" + name,
+			URL:    repo + "/releases/download/" + tag + "/" + name,
 			SHA256: hex.EncodeToString(sum[:]),
 			Size:   int64(len(data)),
 		})

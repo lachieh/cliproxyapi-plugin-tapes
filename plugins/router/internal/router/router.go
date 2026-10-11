@@ -12,7 +12,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 
-	"github.com/lachieh/cliproxyapi-plugin-lachieh/internal/usage"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/router/internal/usage"
 )
 
 // UsageSource returns a recent usage reading for an account.

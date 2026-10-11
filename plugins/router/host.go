@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/lachieh/cliproxyapi-plugins/internal/cabi"
+
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -12,7 +14,7 @@ import (
 type hostBridge struct{}
 
 func (hostBridge) ListAuths() ([]pluginapi.HostAuthFileEntry, error) {
-	raw, err := callHost(pluginabi.MethodHostAuthList, map[string]any{})
+	raw, err := cabi.CallHost(pluginabi.MethodHostAuthList, map[string]any{})
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +28,7 @@ func (hostBridge) ListAuths() ([]pluginapi.HostAuthFileEntry, error) {
 }
 
 func (hostBridge) AuthJSON(authIndex string) (json.RawMessage, error) {
-	raw, err := callHost(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: authIndex})
+	raw, err := cabi.CallHost(pluginabi.MethodHostAuthGet, pluginapi.HostAuthGetRequest{AuthIndex: authIndex})
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (hostBridge) AuthJSON(authIndex string) (json.RawMessage, error) {
 }
 
 func (hostBridge) Do(req pluginapi.HTTPRequest) (pluginapi.HTTPResponse, error) {
-	raw, err := callHost(pluginabi.MethodHostHTTPDo, map[string]any{
+	raw, err := cabi.CallHost(pluginabi.MethodHostHTTPDo, map[string]any{
 		"method":  req.Method,
 		"url":     req.URL,
 		"headers": req.Headers,

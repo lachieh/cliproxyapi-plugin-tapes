@@ -1,0 +1,10 @@
+{
+  "id": "lachieh-router",
+  "name": "Lachieh Router",
+  "description": "Personal session routing: provider/model rules and sticky account preferences, edited on a Routing page in the management panel.",
+  "author": "lachieh",
+  "repository": "https://github.com/lachieh/cliproxyapi-plugins",
+  "logo": "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugins/main/plugins/router/assets/icon.svg",
+  "license": "MIT",
+  "tags": ["router", "scheduler"]
+}

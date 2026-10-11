@@ -10,7 +10,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 
-	"github.com/lachieh/cliproxyapi-plugin-lachieh/internal/usage"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/router/internal/usage"
 )
 
 // Wednesday 2026-10-07 10:00 UTC.

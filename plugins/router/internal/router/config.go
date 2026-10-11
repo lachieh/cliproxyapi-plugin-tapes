@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/lachieh/cliproxyapi-plugin-lachieh/internal/usage"
+	"github.com/lachieh/cliproxyapi-plugins/plugins/router/internal/usage"
 )
 
 // Config is the YAML under plugins.configs.<plugin-id>.
