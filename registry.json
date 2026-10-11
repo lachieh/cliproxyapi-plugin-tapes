@@ -101,6 +101,60 @@
           }
         }
       ]
+    },
+    {
+      "id": "lachieh-router",
+      "name": "Lachieh Router",
+      "description": "Personal session routing: provider/model rules and sticky account preferences, edited on a Routing page in the management panel.",
+      "author": "lachieh",
+      "repository": "https://github.com/lachieh/cliproxyapi-plugins",
+      "logo": "https://raw.githubusercontent.com/lachieh/cliproxyapi-plugins/main/plugins/router/assets/icon.svg",
+      "license": "MIT",
+      "tags": [
+        "router",
+        "scheduler"
+      ],
+      "version": "0.3.0",
+      "install": {
+        "type": "direct",
+        "artifacts": [
+          {
+            "goos": "darwin",
+            "goarch": "amd64",
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/router/v0.3.0/lachieh-router_0.3.0_darwin_amd64.zip",
+            "sha256": "56de32111aef20265881ad8147fe75e438e525e39602f00c334149778154ede3",
+            "size": 2077902
+          },
+          {
+            "goos": "darwin",
+            "goarch": "arm64",
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/router/v0.3.0/lachieh-router_0.3.0_darwin_arm64.zip",
+            "sha256": "b353fd934c37813e1ad5aaeec47972b4d1952d7138473294d7b3bea26af70905",
+            "size": 1931364
+          },
+          {
+            "goos": "linux",
+            "goarch": "amd64",
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/router/v0.3.0/lachieh-router_0.3.0_linux_amd64.zip",
+            "sha256": "920e43ec91b7424cc253e86ed7807cf544916fae50a89c71251b5b6642b3b837",
+            "size": 2168294
+          },
+          {
+            "goos": "linux",
+            "goarch": "arm64",
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/router/v0.3.0/lachieh-router_0.3.0_linux_arm64.zip",
+            "sha256": "4548e8053c5536aa7734e8ae9c5c7ee1431db22d0fe43a567f061b8fb82329fb",
+            "size": 1986487
+          },
+          {
+            "goos": "windows",
+            "goarch": "amd64",
+            "url": "https://github.com/lachieh/cliproxyapi-plugins/releases/download/router/v0.3.0/lachieh-router_0.3.0_windows_amd64.zip",
+            "sha256": "709ae0467049fb521de6238692259fdfc728c3363ac9fb1a495ab2a226602799",
+            "size": 2133630
+          }
+        ]
+      }
     }
   ]
 }
